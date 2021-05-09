@@ -139,7 +139,6 @@ class ManageChannel
 
         $channelMembers = $this->getSlackChannelMembers($slackChannelId);
         if (!is_array($channelMembers)) {
-            $this->out('Failed to get channel members.');
             return;
         }
 
@@ -215,7 +214,7 @@ class ManageChannel
                 $nextCursor = (string)$result->response_metadata->next_cursor;
                 $members = array_merge($members, $result->members);
             } else {
-                $this->error('Failed to get channel members', $result);
+                $this->error("Failed to get channel members for $channelId", $result);
                 return null;
             }
         } while ($nextCursor !== '');

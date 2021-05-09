@@ -12,9 +12,11 @@ Adds and removes users from Slack channels based on Neucore groups.
 
 - Create a Neucore app.
   - Add all relevant groups to it.
-  - Add role `app-groups`, `app-chars`.
+  - Add roles `app-groups`, `app-chars`.
 - Create a Slack application at https://api.slack.com/apps.
-  - Add permission bot scopes: `groups:read`, `groups:write`.
+  - Add desired permission bot scopes:
+    - `groups:read` and `groups:write` for private channels,
+    - `channels:read` and `channels:manage` for public channels.
   - Install to Workspace.
 - Add bot to channel(s) that it should manage: `/invite @bot-name` (remove with `/kick @bot-name`).
 - Copy `config.dist.php` to `config.php` and add your configuration.
