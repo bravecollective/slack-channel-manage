@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Brave\Slack;
 
-class ConfigMap {
+class Config {
+
+    public const ACTION_INVITE = 'invite';
+
+    public const ACTION_KICK = 'kick';
 
     public string $channelId;
 
@@ -14,11 +18,17 @@ class ConfigMap {
     public array $groupIds;
 
     /**
+     * @var string[]
+     */
+    public array $actions;
+
+    /**
      * @param int[] $groupIds
      */
-    public function __construct(string $channelId, array $groupIds)
+    public function __construct(string $channelId, array $groupIds, array $actions)
     {
         $this->channelId = $channelId;
         $this->groupIds = $groupIds;
+        $this->actions = $actions;
     }
 }

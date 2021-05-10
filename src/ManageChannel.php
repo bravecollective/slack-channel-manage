@@ -9,6 +9,8 @@ use PDOException;
 
 class ManageChannel
 {
+    private const SLACK_ACCOUNT_STATUS_ACTIVE = 'Active';
+
     private string $neucoreUrl;
 
     private string $neucoreToken;
@@ -18,7 +20,7 @@ class ManageChannel
     private PDO $pdo;
 
     /**
-     * @var ConfigMap[]
+     * @var Config[]
      */
     private array $configMap;
 
@@ -66,7 +68,7 @@ class ManageChannel
 
         // add members
         foreach ($this->configMap as $entry) {
-            $this->processGroup($entry->channelId, $entry->groupIds);
+            $this->processGroup($entry);
         }
 
         $this->out('Finished.');
@@ -107,43 +109,49 @@ class ManageChannel
         /** @noinspection PhpIncludeInspection */
         $config = include $configFile;
 
-        foreach ($config as $channelId => $groupIds) {
+        foreach ($config as $channelId => $configuration) {
             $channelId = (string) $channelId;
             if (empty($channelId)) {
                 $this->out('Configuration error: Channel ID cannot be empty.');
                 return false;
             }
-            if (!is_array($groupIds) || empty($groupIds)) {
-                $this->out('Group IDs need to be an array that is not empty.');
+            if (empty($configuration['groups']) || !is_array($configuration['groups'])) {
                 $this->out('Configuration error: Neucore group IDs must be an array that is not empty.');
                 return false;
             }
-            foreach ($groupIds as $groupId) {
+            foreach ($configuration['groups'] as $groupId) {
                 if (!is_int($groupId) || $groupId < 1) {
                     $this->out('Configuration error: Neucore group ID must be an integer greater 0.');
                     return false;
                 }
             }
-            $this->configMap[] = new ConfigMap($channelId, $groupIds);
+            if (!isset($configuration['actions'])) {
+                $this->out('Configuration error: Missing actions.');
+            }
+            $actions = explode(',', (string)$configuration['actions']);
+            if ($actions[0] !== Config::ACTION_INVITE && $actions[0] !== Config::ACTION_KICK) {
+                $this->out('Configuration error: Invalid actions.');
+            }
+            if (isset($actions[1]) && $actions[1] !== Config::ACTION_INVITE && $actions[1] !== Config::ACTION_KICK) {
+                $this->out('Configuration error: Invalid actions.');
+            }
+            $this->configMap[] = new Config($channelId, $configuration['groups'], $actions);
         }
 
         return true;
     }
 
-    /**
-     * @param int[] $neucoreGroupId
-     */
-    private function processGroup(string $slackChannelId, array $neucoreGroupId): void
+    private function processGroup(Config $config): void
     {
-        $this->out("Processing Slack channel $slackChannelId ...");
+        $this->out("Processing Slack channel $config->channelId ...");
 
-        $channelMembers = $this->getSlackChannelMembers($slackChannelId);
+        $channelMembers = $this->getSlackChannelMembers($config->channelId);
         if (!is_array($channelMembers)) {
             return;
         }
 
         // get group members - main character from the accounts
-        $groupMembers = $this->getCoreGroupMembers($neucoreGroupId);
+        $groupMembers = $this->getCoreGroupMembers($config->groupIds);
         if (!is_array($groupMembers)) {
             $this->out('Failed to get group members.');
             return;
@@ -156,48 +164,15 @@ class ManageChannel
             return;
         }
         $memberMap = $this->findSlackUsersForAlts($memberMap, $groupMembers);
-        $memberMapFlipped = array_flip($memberMap);
 
         // add members
-        $membersToAdd = [];
-        foreach ($groupMembers as $eveCharacterId) {
-            $slackUserId = $memberMapFlipped[$eveCharacterId] ?? null;
-            if ($slackUserId !== null && !in_array($slackUserId, $channelMembers)) {
-                $membersToAdd[] = $slackUserId;
-            }
-        }
-        foreach (array_chunk($membersToAdd, 1000) as $membersToAddChunk) {
-            $slackUserIds = implode(',', $membersToAddChunk);
-            $data = ['channel' => $slackChannelId,  'users' => $slackUserIds];
-            // https://api.slack.com/methods/conversations.invite
-            $result = $this->slackApiRequest('POST', 'conversations.invite', 50, $data);
-            if ($result && $result->ok) {
-                $this->out("Added user(s) $slackUserIds to channel $slackChannelId");
-            } else {
-                $this->error("Failed to added user(s) $slackUserIds to channel $slackChannelId", $result);
-            }
+        if (in_array(Config::ACTION_INVITE, $config->actions)) {
+            $this->addMember($groupMembers, $channelMembers, $memberMap, $config->channelId);
         }
 
         // remove members
-        $usersToRemove = [];
-        foreach ($channelMembers as $slackUserId) {
-            $eveCharacterId = $memberMap[$slackUserId] ?? null;
-            if ($eveCharacterId === null || !in_array($eveCharacterId, $groupMembers)) {
-                $usersToRemove[] = $slackUserId;
-            }
-        }
-        foreach ($usersToRemove as $slackUserId) {
-            if ($slackUserId === $this->userId) {
-                continue; // do not try to remove the bot, prevent "cant_kick_self" error
-            }
-            $data = ['channel' => $slackChannelId,  'user' => $slackUserId];
-            // https://api.slack.com/methods/conversations.kick
-            $result = $this->slackApiRequest('POST', 'conversations.kick', 50, $data);
-            if ($result && $result->ok) {
-                $this->out("Removed user $slackUserId from channel $slackChannelId");
-            } else {
-                $this->error("Failed to removed user $slackUserId from channel $slackChannelId", $result);
-            }
+        if (in_array(Config::ACTION_KICK, $config->actions)) {
+            $this->removeMember($groupMembers, $channelMembers, $memberMap, $config->channelId);
         }
     }
 
@@ -274,7 +249,7 @@ class ManageChannel
             // to the main character, it will always find the same alt.
         );
         try {
-            $stmt->execute(array_merge($slackUserIds, $eveCharacterIds, ['Active']));
+            $stmt->execute(array_merge($slackUserIds, $eveCharacterIds, [self::SLACK_ACCOUNT_STATUS_ACTIVE]));
         } catch (PDOException $e) {
             $this->out($e->getMessage());
             return null;
@@ -336,6 +311,62 @@ class ManageChannel
         return $memberMap;
     }
 
+    private function addMember(
+        array $groupMembers,
+        array $channelMembers,
+        array $memberMap,
+        string $slackChannelId
+    ): void {
+        $memberMapFlipped = array_flip($memberMap);
+
+        $membersToAdd = [];
+        foreach ($groupMembers as $eveCharacterId) {
+            $slackUserId = $memberMapFlipped[$eveCharacterId] ?? null;
+            if ($slackUserId !== null && !in_array($slackUserId, $channelMembers)) {
+                $membersToAdd[] = $slackUserId;
+            }
+        }
+        foreach (array_chunk($membersToAdd, 1000) as $membersToAddChunk) {
+            $slackUserIds = implode(',', $membersToAddChunk);
+            $data = ['channel' => $slackChannelId,  'users' => $slackUserIds];
+            // https://api.slack.com/methods/conversations.invite
+            $result = $this->slackApiRequest('POST', 'conversations.invite', 50, $data);
+            if ($result && $result->ok) {
+                $this->out("Added user(s) $slackUserIds to channel $slackChannelId");
+            } else {
+                $this->error("Failed to added user(s) $slackUserIds to channel $slackChannelId", $result);
+            }
+        }
+    }
+
+    private function removeMember(
+        array $groupMembers,
+        array $channelMembers,
+        array $memberMap,
+        string $channelId
+    ): void {
+        $usersToRemove = [];
+        foreach ($channelMembers as $slackUserId) {
+            $eveCharacterId = $memberMap[$slackUserId] ?? null;
+            if ($eveCharacterId === null || !in_array($eveCharacterId, $groupMembers)) {
+                $usersToRemove[] = $slackUserId;
+            }
+        }
+        foreach ($usersToRemove as $slackUserId) {
+            if ($slackUserId === $this->userId) {
+                continue; // do not try to remove the bot, prevent "cant_kick_self" error
+            }
+            $data = ['channel' => $channelId,  'user' => $slackUserId];
+            // https://api.slack.com/methods/conversations.kick
+            $result = $this->slackApiRequest('POST', 'conversations.kick', 50, $data);
+            if ($result && $result->ok) {
+                $this->out("Removed user $slackUserId from channel $channelId");
+            } else {
+                $this->error("Failed to removed user $slackUserId from channel $channelId", $result);
+            }
+        }
+    }
+
     private function slackApiRequest(string $method, string $path, int $rateLimit, ?array $data = null): ?object
     {
         if ($this->slackRequestCount > 0) {
@@ -364,6 +395,8 @@ class ManageChannel
      */
     private function httpRequest(string $url, string $method, array $headers, ?array $content = null): ?string
     {
+        $headers[] = 'User-Agent: BRAVE Slack Channel Manage (https://github.com/bravecollective/slack-channel-manage)';
+
         $handle = curl_init();
 
         curl_setopt($handle, CURLOPT_URL, $url);

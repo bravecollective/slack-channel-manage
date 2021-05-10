@@ -2,6 +2,9 @@
 
 Adds and removes users from Slack channels based on Neucore groups.
 
+The app first tries to find an active Slack account for the main character of a Neucore account, if that fails, 
+it tries every alt and uses the first active Slack account found.
+
 ## Requirements
 
 - A [Neucore](https://github.com/bravecollective/neucore) installation.
@@ -14,7 +17,7 @@ Adds and removes users from Slack channels based on Neucore groups.
   - Add all relevant groups to it.
   - Add roles `app-groups`, `app-chars`.
 - Create a Slack application at https://api.slack.com/apps.
-  - Add desired permission bot scopes:
+  - Add desired Bot Token Scopes:
     - `groups:read` and `groups:write` for private channels,
     - `channels:read` and `channels:manage` for public channels.
   - Install to Workspace.
@@ -32,7 +35,7 @@ Adds and removes users from Slack channels based on Neucore groups.
 
 Add and remove users:
 ```
-bin/console
+bin/console run
 ```
 
 When this app removes the last user from a channel, it is automatically renamed and archived by Slackbot.
@@ -45,5 +48,5 @@ bin/console unarchive AB12C3D45
 
 Cron job example:
 ```
-*/20 * * * * user . /path/to/.env.sh && /path/to/bin/console >> /path/to/results-`date +\%Y-\%m`.log
+*/20 * * * * user . /path/to/.env.sh && /path/to/bin/console run >> /path/to/results-`date +\%Y-\%m`.log
 ```
