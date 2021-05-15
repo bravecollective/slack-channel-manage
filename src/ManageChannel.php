@@ -138,16 +138,23 @@ class ManageChannel
                 $this->out('Configuration error: Invalid actions.');
             }
 
-            if (isset($configuration['corporation']) && !is_int($configuration['corporation'])) {
-                $this->out('Configuration error: "corporation" must be an integer.');
-                return false;
+            if (isset($configuration['corporation'])) {
+                if (!is_array($configuration['corporation'])) {
+                    $this->out('Configuration error: "corporation" must be an integer.');
+                    return false;
+                }
+                foreach ($configuration['corporation'] as $groupId => $corporationId) {
+                    if (!is_int($groupId) || !is_int($corporationId)) {
+                        $this->out('Configuration error: "corporation" keys and values must be an integers.');
+                    }
+                }
             }
 
             $this->configMap[] = new Config(
                 $channelId,
                 $configuration['groups'],
                 $actions,
-                $configuration['corporation'] ?? 0
+                $configuration['corporation'] ?? []
             );
         }
 
@@ -212,15 +219,19 @@ class ManageChannel
 
     /**
      * @param int[] $groupIds
+     * @param array<int, int> $corporation
      */
-    private function getCoreGroupMembers(array $groupIds, int $corporation): ?array
+    private function getCoreGroupMembers(array $groupIds, array $corporation): ?array
     {
         $members = [];
 
         foreach ($groupIds as $groupId) {
-            $cacheKey = "$groupId-$corporation";
+            $cacheKey = "$groupId";
+            if (isset($corporation[$groupId])) {
+                $cacheKey = "$groupId-$corporation[$groupId]";
+            }
             if (!isset($this->groupCache[$cacheKey])) {
-                $param = $corporation !== 0 ? "corporation=$corporation" : '';
+                $param = isset($corporation[$groupId]) ? "corporation=$corporation[$groupId]" : '';
                 $result = $this->httpRequest(
                     "$this->neucoreUrl/api/app/v1/group-members/$groupId?$param",
                     'GET',

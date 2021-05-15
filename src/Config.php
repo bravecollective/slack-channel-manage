@@ -22,12 +22,13 @@ class Config {
      */
     public array $actions;
 
-    public int $corporation;
+    public array $corporation;
 
     /**
      * @param int[] $groupIds
+     * @param array<int, int> $corporation
      */
-    public function __construct(string $channelId, array $groupIds, array $actions, int $corporation)
+    public function __construct(string $channelId, array $groupIds, array $actions, array $corporation)
     {
         $this->channelId = $channelId;
         $this->groupIds = $groupIds;
