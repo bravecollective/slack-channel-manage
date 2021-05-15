@@ -140,7 +140,7 @@ class ManageChannel
 
             if (isset($configuration['corporation'])) {
                 if (!is_array($configuration['corporation'])) {
-                    $this->out('Configuration error: "corporation" must be an integer.');
+                    $this->out('Configuration error: "corporation" must be an array.');
                     return false;
                 }
                 foreach ($configuration['corporation'] as $groupId => $corporationId) {
@@ -237,11 +237,11 @@ class ManageChannel
                     'GET',
                     ['Authorization: Bearer ' . $this->neucoreToken],
                 );
-                $object = json_decode((string) $result);
-                if ($object === false) {
+                $groupMembers = json_decode((string) $result);
+                if (!is_array($groupMembers)) {
                     return null;
                 }
-                $this->groupCache[$cacheKey] = $object;
+                $this->groupCache[$cacheKey] = $groupMembers;
             }
 
             $members = array_merge($members, $this->groupCache[$cacheKey]);
