@@ -115,6 +115,7 @@ class ManageChannel
                 $this->out('Configuration error: Channel ID cannot be empty.');
                 return false;
             }
+
             if (empty($configuration['groups']) || !is_array($configuration['groups'])) {
                 $this->out('Configuration error: Neucore group IDs must be an array that is not empty.');
                 return false;
@@ -125,6 +126,7 @@ class ManageChannel
                     return false;
                 }
             }
+
             if (!isset($configuration['actions'])) {
                 $this->out('Configuration error: Missing actions.');
             }
@@ -135,7 +137,18 @@ class ManageChannel
             if (isset($actions[1]) && $actions[1] !== Config::ACTION_INVITE && $actions[1] !== Config::ACTION_KICK) {
                 $this->out('Configuration error: Invalid actions.');
             }
-            $this->configMap[] = new Config($channelId, $configuration['groups'], $actions);
+
+            if (isset($configuration['corporation']) && !is_int($configuration['corporation'])) {
+                $this->out('Configuration error: "corporation" must be an integer.');
+                return false;
+            }
+
+            $this->configMap[] = new Config(
+                $channelId,
+                $configuration['groups'],
+                $actions,
+                $configuration['corporation'] ?? 0
+            );
         }
 
         return true;
@@ -151,7 +164,7 @@ class ManageChannel
         }
 
         // get group members - main character from the accounts
-        $groupMembers = $this->getCoreGroupMembers($config->groupIds);
+        $groupMembers = $this->getCoreGroupMembers($config->groupIds, $config->corporation);
         if (!is_array($groupMembers)) {
             $this->out('Failed to get group members.');
             return;
@@ -200,14 +213,16 @@ class ManageChannel
     /**
      * @param int[] $groupIds
      */
-    private function getCoreGroupMembers(array $groupIds): ?array
+    private function getCoreGroupMembers(array $groupIds, int $corporation): ?array
     {
         $members = [];
 
         foreach ($groupIds as $groupId) {
-            if (!isset($this->groupCache[$groupId])) {
+            $cacheKey = "$groupId-$corporation";
+            if (!isset($this->groupCache[$cacheKey])) {
+                $param = $corporation !== 0 ? "corporation=$corporation" : '';
                 $result = $this->httpRequest(
-                    "$this->neucoreUrl/api/app/v1/group-members/$groupId",
+                    "$this->neucoreUrl/api/app/v1/group-members/$groupId?$param",
                     'GET',
                     ['Authorization: Bearer ' . $this->neucoreToken],
                 );
@@ -215,10 +230,10 @@ class ManageChannel
                 if ($object === false) {
                     return null;
                 }
-                $this->groupCache[$groupId] = $object;
+                $this->groupCache[$cacheKey] = $object;
             }
 
-            $members = array_merge($members, $this->groupCache[$groupId]);
+            $members = array_merge($members, $this->groupCache[$cacheKey]);
         }
 
         return array_keys(array_flip($members));
