@@ -326,7 +326,7 @@ class ManageChannel
                 $membersToAdd[] = $slackUserId;
             }
         }
-        foreach (array_chunk($membersToAdd, 1000) as $membersToAddChunk) {
+        foreach (array_chunk($membersToAdd, 200) as $membersToAddChunk) {
             $slackUserIds = implode(',', $membersToAddChunk);
             $data = ['channel' => $slackChannelId,  'users' => $slackUserIds];
             // https://api.slack.com/methods/conversations.invite
