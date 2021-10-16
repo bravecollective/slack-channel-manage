@@ -24,6 +24,8 @@ class ManageChannel
      */
     private array $configMap;
 
+    private array $ignoreUserKick = [];
+
     private string $userId = '';
 
     private int $slackRequestCount = 0;
@@ -106,11 +108,15 @@ class ManageChannel
             return false;
         }
 
-        /** @noinspection PhpIncludeInspection */
         $config = include $configFile;
 
-        foreach ($config as $channelId => $configuration) {
-            $channelId = (string) $channelId;
+        foreach ($config as $configKey => $configuration) {
+            if ($configKey === 'ignoreUserKick') {
+                $this->ignoreUserKick = $configuration;
+                continue;
+            }
+
+            $channelId = (string) $configKey;
             if (empty($channelId)) {
                 $this->out('Configuration error: Channel ID cannot be empty.');
                 return false;
@@ -379,8 +385,10 @@ class ManageChannel
             }
         }
         foreach ($usersToRemove as $slackUserId) {
-            if ($slackUserId === $this->userId) {
-                continue; // do not try to remove the bot, prevent "cant_kick_self" error
+            if ($slackUserId === $this->userId || in_array($slackUserId, $this->ignoreUserKick)) {
+                // Do not try to remove the bot itself (prevent "cant_kick_self" error) or
+                // any user/bot from the $ignoreUsers configuration.
+                continue;
             }
             $data = ['channel' => $channelId,  'user' => $slackUserId];
             // https://api.slack.com/methods/conversations.kick
