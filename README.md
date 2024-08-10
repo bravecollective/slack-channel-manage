@@ -9,7 +9,7 @@ it tries every alt and uses the first active Slack account found.
 
 - A [Neucore](https://github.com/bravecollective/neucore) installation.
 - Access to the database of the [neucore-plugin-slack](https://github.com/bravecollective/neucore-plugin-slack) plugin.
-- PHP 7.4+ with curl, json and PDO extensions.
+- PHP 8.1+ with curl, json and PDO extensions.
 
 ## Setup
 

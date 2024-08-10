@@ -35,10 +35,10 @@ class ManageChannel
     /**
      * Un-archive a channel - in case the last member was removed
      */
-    public function unArchive(string $channel)
+    public function unArchive(string $channel): bool
     {
         if (!$this->readConfig()) {
-            exit(1);
+            return false;
         }
 
         $result = $this->slackApiRequest('POST', 'conversations.unarchive', 20, ['channel' => $channel]);
@@ -48,14 +48,16 @@ class ManageChannel
             $error = $result ? $result->error : 'unknown error';
             echo "Error: $error." . PHP_EOL;
         }
+
+        return true;
     }
 
-    public function run()
+    public function run(): bool
     {
         $this->out('Start sync.');
 
         if (!$this->readConfig()) {
-            exit(1);
+            return false;
         }
 
         // get user id of app
@@ -65,7 +67,7 @@ class ManageChannel
             $this->userId = $identity->user_id;
         } else {
             $this->error('Error getting identity', $identity);
-            exit(1);
+            return false;
         }
 
         // add members
@@ -74,7 +76,7 @@ class ManageChannel
         }
 
         $this->out('Finished.');
-        exit(0);
+        return true;
     }
 
     private function readConfig(): bool
@@ -311,8 +313,8 @@ class ManageChannel
             ['Authorization: Bearer ' . $this->neucoreToken, 'Content-Type: application/json; charset=utf-8'],
             array_values($missing)
         );
-        $characters = json_decode((string) $coreResult);
-        if ($characters == false) {
+        $characters = json_decode((string)$coreResult);
+        if (!is_array($characters)) {
             // an error here does not really matter, continue.
             return $memberMap;
         }
@@ -461,7 +463,7 @@ class ManageChannel
         return $result;
     }
 
-    private function error(string $message, ?object $result)
+    private function error(string $message, ?object $result): void
     {
         $error = $result ? $result->error : 'unknown error';
         $this->out("$message: $error.");
